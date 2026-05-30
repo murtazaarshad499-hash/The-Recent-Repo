@@ -25,8 +25,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
-import { useUser, useClerk } from "@clerk/react"
+import { useAuth } from "@/lib/auth-context"
 import { useCurrentUser } from "@/lib/user-api"
+import { useLocation as useWouterLocation } from "wouter"
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -182,18 +183,20 @@ function SidebarUserSection({
   onToggleNotif: () => void
   unreadCount: number
 }) {
-  const { user } = useUser()
-  const { signOut } = useClerk()
+  const { user, signOut } = useAuth()
   const { data: profile } = useCurrentUser()
   const { theme, setTheme } = useTheme()
-  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "")
+  const [, setLocation] = useWouterLocation()
+
+  const handleSignOut = async () => {
+    await signOut()
+    setLocation("/")
+  }
 
   const displayName =
     profile?.firstName && profile?.lastName
       ? `${profile.firstName} ${profile.lastName}`
-      : user?.firstName && user?.lastName
-        ? `${user.firstName} ${user.lastName}`
-        : user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "User"
+      : user?.email?.split("@")[0] || "User"
 
   const displayTitle = profile?.title || profile?.role || "Agent"
 
@@ -232,6 +235,9 @@ function SidebarUserSection({
       </Button>
       {!collapsed && (
         <div className="flex min-w-0 flex-1 items-center gap-1 pl-1">
+          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/80 to-accent/80 text-xs font-semibold text-primary-foreground">
+            {initials}
+          </div>
           <div className="flex min-w-0 flex-1 flex-col">
             <p className="truncate text-sm font-medium text-sidebar-foreground">{displayName}</p>
             <p className="truncate text-xs text-muted-foreground capitalize">{displayTitle}</p>
@@ -241,7 +247,7 @@ function SidebarUserSection({
             size="icon"
             className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
             title="Sign out"
-            onClick={() => signOut({ redirectUrl: basePath || "/" })}
+            onClick={handleSignOut}
           >
             <LogOut className="h-3.5 w-3.5" />
           </Button>
@@ -253,7 +259,7 @@ function SidebarUserSection({
           size="icon"
           className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
           title="Sign out"
-          onClick={() => signOut({ redirectUrl: basePath || "/" })}
+          onClick={handleSignOut}
         >
           <LogOut className="h-4 w-4" />
         </Button>

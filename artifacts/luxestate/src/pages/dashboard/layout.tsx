@@ -8,7 +8,7 @@ import { motion } from "framer-motion"
 import { Bell, Sun, Moon, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "next-themes"
-import { useUser } from "@clerk/react"
+import { useAuth } from "@/lib/auth-context"
 import { useCurrentUser } from "@/lib/user-api"
 
 const SEED_NOTIFICATIONS: Notification[] = [
@@ -138,7 +138,7 @@ function GlobalHeader({
 }) {
   const [location] = useLocation()
   const { theme, setTheme } = useTheme()
-  const { user } = useUser()
+  const { user } = useAuth()
   const { data: profile } = useCurrentUser()
   const title = getPageTitle(location)
 
@@ -152,9 +152,7 @@ function GlobalHeader({
   const displayName =
     profile?.firstName && profile?.lastName
       ? `${profile.firstName} ${profile.lastName}`
-      : user?.firstName && user?.lastName
-        ? `${user.firstName} ${user.lastName}`
-        : user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "User"
+      : user?.email?.split("@")[0] || "User"
 
   const initials = displayName
     .split(" ")

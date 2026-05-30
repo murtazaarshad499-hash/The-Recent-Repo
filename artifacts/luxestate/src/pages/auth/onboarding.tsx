@@ -1,5 +1,4 @@
-import { useState } from "react"
-import { useUser } from "@clerk/react"
+import { useState, useEffect } from "react"
 import { useLocation } from "wouter"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
@@ -7,6 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Building2, ArrowRight, CheckCircle2, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
+import { supabase } from "@/lib/supabase"
 
 const ROLES = [
   { value: "admin", label: "Admin", description: "Full access to all features and team management" },
@@ -25,41 +26,54 @@ const TITLES = [
   "Other",
 ]
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "")
+
 export default function OnboardingPage() {
-  const { user, isLoaded } = useUser()
+  const { user, loading } = useAuth()
   const [, setLocation] = useLocation()
-  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "")
 
   const [step, setStep] = useState(1)
-  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
 
   const [form, setForm] = useState({
-    firstName: user?.firstName || "",
-    lastName: user?.lastName || "",
+    firstName: "",
+    lastName: "",
     phone: "",
     role: "agent",
     title: "Agent",
   })
 
+  useEffect(() => {
+    if (!loading && !user) {
+      setLocation("/sign-in")
+    }
+  }, [user, loading, setLocation])
+
   const update = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }))
 
   const handleSubmit = async () => {
-    setLoading(true)
+    setSubmitting(true)
     setError("")
     try {
-      const res = await fetch(`${basePath}/api/users/me`, {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error("No session")
+
+      const res = await fetch(`${BASE}/api/users/me`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
-          email: user?.primaryEmailAddress?.emailAddress || "",
+          email: user?.email || "",
           firstName: form.firstName,
           lastName: form.lastName,
           phone: form.phone,
           role: form.role,
           title: form.title,
-          avatarUrl: user?.imageUrl || null,
+          avatarUrl: user?.user_metadata?.avatar_url || null,
           onboarded: true,
         }),
       })
@@ -68,11 +82,11 @@ export default function OnboardingPage() {
     } catch {
       setError("Something went wrong. Please try again.")
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
-  if (!isLoaded) {
+  if (loading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -119,7 +133,7 @@ export default function OnboardingPage() {
                 transition={{ duration: 0.3 }}
               >
                 <h1 className="mb-1 text-2xl font-semibold text-foreground">
-                  Welcome, {user?.firstName || "there"}!
+                  Welcome!
                 </h1>
                 <p className="mb-6 text-sm text-muted-foreground">
                   Let's set up your profile so your team knows who you are.
@@ -256,13 +270,13 @@ export default function OnboardingPage() {
                   <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>
                     Back
                   </Button>
-                  <Button className="flex-1" onClick={handleSubmit} disabled={loading}>
-                    {loading ? (
+                  <Button className="flex-1" onClick={handleSubmit} disabled={submitting}>
+                    {submitting ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <CheckCircle2 className="mr-2 h-4 w-4" />
                     )}
-                    {loading ? "Saving..." : "Complete Setup"}
+                    {submitting ? "Saving…" : "Complete Setup"}
                   </Button>
                 </div>
 

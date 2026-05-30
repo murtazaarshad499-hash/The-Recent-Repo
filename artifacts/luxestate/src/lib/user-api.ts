@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { supabase } from "./supabase"
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "")
 
@@ -16,16 +17,24 @@ export type UserProfile = {
   updatedAt: string
 }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return {}
+  return { Authorization: `Bearer ${session.access_token}` }
+}
+
 async function fetchCurrentUser(): Promise<UserProfile> {
-  const res = await fetch(`${BASE}/api/users/me`)
+  const headers = await getAuthHeaders()
+  const res = await fetch(`${BASE}/api/users/me`, { headers })
   if (!res.ok) throw new Error("Not found")
   return res.json()
 }
 
 async function upsertCurrentUser(data: Partial<UserProfile>): Promise<UserProfile> {
+  const headers = await getAuthHeaders()
   const res = await fetch(`${BASE}/api/users/me`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(data),
   })
   if (!res.ok) throw new Error("Failed to save user")
