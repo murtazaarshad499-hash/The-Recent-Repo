@@ -34,7 +34,13 @@ export default function SignInPage() {
 
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
-      setError(error.message)
+      if (error.message.toLowerCase().includes("not confirmed") || error.message.toLowerCase().includes("email")) {
+        setError("Please confirm your email first — check your inbox for a link from us, then come back to sign in.")
+      } else if (error.message.toLowerCase().includes("invalid login")) {
+        setError("Incorrect email or password. Please try again.")
+      } else {
+        setError(error.message)
+      }
       setLoading(false)
       return
     }
@@ -51,7 +57,16 @@ export default function SignInPage() {
       },
     })
     if (error) {
-      setError(error.message)
+      if (
+        error.message.toLowerCase().includes("provider") ||
+        error.message.toLowerCase().includes("not enabled") ||
+        error.message.toLowerCase().includes("not supported") ||
+        error.message.toLowerCase().includes("unsupported")
+      ) {
+        setError("Google sign-in isn't activated yet. Go to your Supabase Dashboard → Authentication → Providers → Google and turn it on.")
+      } else {
+        setError("Google sign-in failed: " + error.message)
+      }
       setGoogleLoading(false)
     }
   }
@@ -84,11 +99,7 @@ export default function SignInPage() {
             onClick={handleGoogle}
             disabled={googleLoading || loading}
           >
-            {googleLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <GoogleIcon />
-            )}
+            {googleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
             Continue with Google
           </Button>
 

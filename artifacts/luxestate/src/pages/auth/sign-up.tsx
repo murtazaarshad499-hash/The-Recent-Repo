@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, Eye, EyeOff, CheckCircle2 } from "lucide-react"
+import { Loader2, Eye, EyeOff, Mail } from "lucide-react"
 import { motion } from "framer-motion"
 
 function GoogleIcon() {
@@ -26,7 +26,7 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState("")
-  const [done, setDone] = useState(false)
+  const [checkEmail, setCheckEmail] = useState(false)
 
   const handleGoogle = async () => {
     setGoogleLoading(true)
@@ -38,7 +38,11 @@ export default function SignUpPage() {
       },
     })
     if (error) {
-      setError(error.message)
+      if (error.message.toLowerCase().includes("provider") || error.message.toLowerCase().includes("not enabled") || error.message.toLowerCase().includes("not supported")) {
+        setError("Google sign-in isn't enabled yet. Go to your Supabase Dashboard → Authentication → Providers → Google and turn it on.")
+      } else {
+        setError("Google sign-in failed: " + error.message)
+      }
       setGoogleLoading(false)
     }
   }
@@ -53,7 +57,7 @@ export default function SignUpPage() {
     }
 
     setLoading(true)
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -67,23 +71,44 @@ export default function SignUpPage() {
       return
     }
 
-    setDone(true)
+    // If session exists immediately → email confirmation is OFF, go straight to onboarding
+    if (data.session) {
+      setLocation("/onboarding")
+      return
+    }
+
+    // Otherwise Supabase sent a confirmation email → show the check-email screen
+    setCheckEmail(true)
     setLoading(false)
-    setTimeout(() => setLocation("/onboarding"), 1200)
   }
 
-  if (done) {
+  if (checkEmail) {
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-br from-amber-50 via-background to-orange-50 px-4 py-12">
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
+          initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md text-center"
+          className="w-full max-w-md"
         >
-          <div className="rounded-2xl bg-white p-10 shadow-xl shadow-black/8">
-            <CheckCircle2 className="mx-auto mb-4 h-14 w-14 text-green-500" />
-            <h2 className="mb-2 text-xl font-semibold">Account created!</h2>
-            <p className="text-sm text-muted-foreground">Taking you to setup…</p>
+          <div className="rounded-2xl bg-white p-10 shadow-xl shadow-black/8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+              <Mail className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="mb-2 text-xl font-semibold">Check your email</h2>
+            <p className="mb-1 text-sm text-muted-foreground">
+              We sent a confirmation link to
+            </p>
+            <p className="mb-4 font-medium text-foreground">{email}</p>
+            <p className="text-sm text-muted-foreground">
+              Click the link in that email to activate your account, then come back here to sign in.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-6 w-full"
+              onClick={() => setLocation("/sign-in")}
+            >
+              Go to Sign In
+            </Button>
           </div>
         </motion.div>
       </div>
@@ -118,11 +143,7 @@ export default function SignUpPage() {
             onClick={handleGoogle}
             disabled={googleLoading || loading}
           >
-            {googleLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <GoogleIcon />
-            )}
+            {googleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
             Continue with Google
           </Button>
 
@@ -150,16 +171,14 @@ export default function SignUpPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-sm font-medium">
-                Password <span className="text-muted-foreground font-normal">(min. 6 characters)</span>
-              </Label>
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Choose a password"
+                  placeholder="Choose a password (min. 6 characters)"
                   required
                   autoComplete="new-password"
                   className="pr-10"
