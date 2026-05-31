@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.conversations (
   id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id          UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   contact_id       UUID REFERENCES public.contacts(id) ON DELETE SET NULL,
+  lead_id          INTEGER,   -- links to Leads (Postgres integer PK)
   title            TEXT,
   status           TEXT DEFAULT 'active' CHECK (status IN ('active', 'pending', 'resolved')),
   linked_property  TEXT,
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
 -- 4. INDEXES
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id  ON public.conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_contact  ON public.conversations(contact_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_lead_id  ON public.conversations(lead_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation  ON public.messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at   ON public.messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_user_id      ON public.contacts(user_id);

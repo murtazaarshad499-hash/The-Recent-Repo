@@ -56,6 +56,7 @@ import {
 } from "@/components/dashboard/leads-data"
 import { Lead, LeadPriority, LeadSource, LeadStatus } from "@/components/dashboard/leads-types"
 import { useLeads, useUpdateLead, useDeleteLead } from "@/lib/leads-api"
+import { LeadMessagesTab } from "@/components/dashboard/lead-messages-tab"
 import { toast } from "sonner"
 
 type TimelineEvent = {
@@ -114,7 +115,7 @@ export default function LeadProfilePage({ params }: { params: { id: string } }) 
   const [newNote, setNewNote] = useState("")
   const [isEditing, setIsEditing] = useState(false)
   const [editData, setEditData] = useState<Lead | null>(null)
-  const [activeTab, setActiveTab] = useState<"timeline" | "notes" | "files">("timeline")
+  const [activeTab, setActiveTab] = useState<"timeline" | "messages" | "notes" | "files">("timeline")
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const { data: leads = [], isLoading } = useLeads()
@@ -368,7 +369,7 @@ export default function LeadProfilePage({ params }: { params: { id: string } }) 
         >
           {/* Tabs */}
           <div className="mb-5 flex gap-1 rounded-xl border border-border/40 bg-secondary/20 p-1">
-            {(["timeline", "notes", "files"] as const).map((t) => (
+            {(["timeline", "messages", "notes", "files"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setActiveTab(t)}
@@ -377,7 +378,8 @@ export default function LeadProfilePage({ params }: { params: { id: string } }) 
                   activeTab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {t === "notes" ? `Notes (${(lead.notes ?? []).length})` :
+                {t === "messages" ? "Messages" :
+                 t === "notes" ? `Notes (${(lead.notes ?? []).length})` :
                  t === "files" ? `Files (${(lead.attachments ?? []).length})` :
                  "Timeline"}
               </button>
@@ -474,6 +476,11 @@ export default function LeadProfilePage({ params }: { params: { id: string } }) 
                 </div>
               )}
             </div>
+          )}
+
+          {/* MESSAGES */}
+          {activeTab === "messages" && (
+            <LeadMessagesTab lead={lead} />
           )}
         </motion.div>
 

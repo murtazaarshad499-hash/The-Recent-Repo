@@ -19,8 +19,10 @@ import {
   ArrowUp,
   CheckCircle2,
   ExternalLink,
+  MessageSquare,
+  Loader2,
 } from "lucide-react"
-import { Link } from "wouter"
+import { Link, useLocation } from "wouter"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -46,6 +48,8 @@ import { Lead, LeadPriority, LeadSource, LeadStatus } from "@/components/dashboa
 import { LeadDetailModal } from "@/components/dashboard/lead-detail-modal"
 import { AddLeadModal } from "@/components/dashboard/add-lead-modal"
 import { LeadImportModal } from "@/components/dashboard/lead-import-modal"
+import { useAuth } from "@/lib/auth-context"
+import { getOrCreateConversationForLead } from "@/lib/messaging-api"
 
 type LeadsTableProps = {
   leads: Lead[]
@@ -119,6 +123,8 @@ function exportCSV(leads: Lead[]) {
 
 export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpdate, onDelete, onBulkDelete, onImport }: LeadsTableProps) {
   const isLoading = externalLoading ?? false
+  const [, navigate] = useLocation()
+  const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all")
   const [sourceFilter, setSourceFilter] = useState<LeadSource | "all">("all")
@@ -131,6 +137,7 @@ export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpda
   const [detailLeadId, setDetailLeadId] = useState<number | null>(null)
   const [showAddLead, setShowAddLead] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [openingMsgLeadId, setOpeningMsgLeadId] = useState<number | null>(null)
 
 
   const detailLead = useMemo(
@@ -208,6 +215,26 @@ export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpda
     const msg = encodeURIComponent(`Hi ${lead.name}, just checking in regarding ${lead.property}.`)
     const phone = lead.whatsappNumber.replace(/\D/g, "")
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank", "noopener,noreferrer")
+  }
+
+  const openMessages = async (lead: Lead, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!user || openingMsgLeadId) return
+    setOpeningMsgLeadId(lead.id)
+    try {
+      const conv = await getOrCreateConversationForLead(user.id, {
+        id: lead.id,
+        name: lead.name,
+        phone: lead.phone && lead.phone !== "—" ? lead.phone : undefined,
+        email: lead.email,
+        property: lead.property && lead.property !== "—" ? lead.property : undefined,
+      })
+      navigate(`/dashboard/messages?convId=${conv.id}`)
+    } catch {
+      navigate("/dashboard/messages")
+    } finally {
+      setOpeningMsgLeadId(null)
+    }
   }
 
   const resetFilters = () => {
@@ -663,11 +690,16 @@ export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpda
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-green-500 hover:bg-green-500/10"
-                            title="WhatsApp"
-                            onClick={() => openWhatsApp(lead)}
+                            className="h-7 w-7 text-primary hover:bg-primary/10"
+                            title="Open in Messages"
+                            onClick={(e) => openMessages(lead, e)}
+                            disabled={openingMsgLeadId === lead.id}
                           >
-                            <MessageCircle className="h-3.5 w-3.5" />
+                            {openingMsgLeadId === lead.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <MessageSquare className="h-3.5 w-3.5" />
+                            )}
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

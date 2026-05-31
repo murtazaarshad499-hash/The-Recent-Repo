@@ -13,9 +13,12 @@ import {
   CreateLeadInput,
   UpdateLeadInput,
 } from "@/lib/leads-api"
+import { useAuth } from "@/lib/auth-context"
+import { getOrCreateConversationForLead } from "@/lib/messaging-api"
 import { toast } from "sonner"
 
 export default function LeadsPage() {
+  const { user } = useAuth()
   const { data: leads = [], isLoading } = useLeads()
   const createLead = useCreateLead()
   const updateLead = useUpdateLead()
@@ -67,6 +70,16 @@ export default function LeadsPage() {
     try {
       const lead = await createLead.mutateAsync(data)
       toast.success(`Lead created — ${data.name}`)
+      // Auto-create messaging conversation (fire-and-forget, errors silenced)
+      if (user) {
+        getOrCreateConversationForLead(user.id, {
+          id: lead.id,
+          name: lead.name,
+          phone: lead.phone && lead.phone !== "—" ? lead.phone : undefined,
+          email: lead.email,
+          property: lead.property && lead.property !== "—" ? lead.property : undefined,
+        }).catch(() => {})
+      }
       return lead
     } catch {
       toast.error("Failed to create lead")

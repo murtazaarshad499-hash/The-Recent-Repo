@@ -21,7 +21,9 @@ import {
   MessageCircle,
   UserPlus,
   RefreshCw,
+  ExternalLink,
 } from "lucide-react"
+import { Link } from "wouter"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +47,7 @@ import {
   getMessages,
   sendMessage as apiSendMessage,
   createConversation,
+  getOrCreateConversationForLead,
   updateConversationStatus,
   markConversationRead,
   formatMessageTime,
@@ -226,10 +229,12 @@ export default function MessagesPage() {
   const [filterStatus, setFilterStatus]   = useState<"all" | "active" | "pending" | "resolved">("all")
   const [showNewConv, setShowNewConv]     = useState(false)
 
-  const bottomRef    = useRef<HTMLDivElement>(null)
-  const inputRef     = useRef<HTMLInputElement>(null)
-  const msgChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const bottomRef      = useRef<HTMLDivElement>(null)
+  const inputRef       = useRef<HTMLInputElement>(null)
+  const msgChannelRef  = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const convChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  // convId to auto-select, parsed once from URL on mount
+  const convIdFromUrl  = useRef(new URLSearchParams(window.location.search).get("convId"))
 
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null
   const totalUnread  = conversations.reduce((s, c) => s + c.unread_count, 0)
@@ -260,6 +265,17 @@ export default function MessagesPage() {
   useEffect(() => {
     loadConversations()
   }, [loadConversations])
+
+  // ── Auto-select conversation from URL ?convId= param ────
+  useEffect(() => {
+    const targetId = convIdFromUrl.current
+    if (!targetId || !conversations.length || selectedId) return
+    const match = conversations.find((c) => c.id === targetId)
+    if (match) {
+      setSelectedId(match.id)
+      convIdFromUrl.current = null
+    }
+  }, [conversations, selectedId])
 
   // ── Subscribe to conversation list changes ──────────────
   useEffect(() => {
@@ -580,6 +596,18 @@ export default function MessagesPage() {
                   >
                     {convStatusConfig[selectedConv.status].label}
                   </Badge>
+                  {selectedConv.lead_id && (
+                    <Link href={`/dashboard/leads/${selectedConv.lead_id}`}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Lead Profile
+                      </Button>
+                    </Link>
+                  )}
                   <Button variant="ghost" size="icon" className="h-8 w-8">
                     <Phone className="h-4 w-4" />
                   </Button>

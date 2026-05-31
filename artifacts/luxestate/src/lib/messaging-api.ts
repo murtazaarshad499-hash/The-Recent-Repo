@@ -17,6 +17,7 @@ export type Conversation = {
   user_id: string
   contact_id: string | null
   contact: Contact | null
+  lead_id: number | null
   title: string | null
   status: "active" | "pending" | "resolved"
   linked_property: string | null
@@ -78,9 +79,77 @@ export async function createConversation(
     .insert({
       user_id: userId,
       contact_id: contact.id,
+      lead_id: null,
       title: contactData.name,
       status: "active",
       linked_property: contactData.linked_property || null,
+      last_message_at: new Date().toISOString(),
+      unread_count: 0,
+    })
+    .select("*, contact:contacts(*)")
+    .single()
+
+  if (ve) throw ve
+  return conv as Conversation
+}
+
+/**
+ * Idempotent: returns an existing conversation for this lead_id,
+ * or creates a new one. Guarantees no duplicates per lead.
+ */
+export async function getOrCreateConversationForLead(
+  userId: string,
+  lead: {
+    id: number
+    name: string
+    phone?: string
+    email?: string
+    property?: string
+  }
+): Promise<Conversation> {
+  // Check for existing conversation tied to this lead
+  const { data: existing, error: fe } = await supabase
+    .from("conversations")
+    .select("*, contact:contacts(*)")
+    .eq("user_id", userId)
+    .eq("lead_id", lead.id)
+    .maybeSingle()
+
+  if (fe) throw fe
+  if (existing) return existing as Conversation
+
+  // Create contact entry
+  const initials = lead.name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
+
+  const { data: contact, error: ce } = await supabase
+    .from("contacts")
+    .insert({
+      user_id: userId,
+      name: lead.name,
+      phone: lead.phone || null,
+      email: lead.email || null,
+      avatar_initials: initials,
+    })
+    .select()
+    .single()
+
+  if (ce) throw ce
+
+  // Create conversation linked to lead
+  const { data: conv, error: ve } = await supabase
+    .from("conversations")
+    .insert({
+      user_id: userId,
+      contact_id: contact.id,
+      lead_id: lead.id,
+      title: lead.name,
+      status: "active",
+      linked_property: lead.property || null,
       last_message_at: new Date().toISOString(),
       unread_count: 0,
     })
@@ -126,7 +195,6 @@ export async function sendMessage(
 
   if (error) throw error
 
-  // Update conversation summary
   await supabase
     .from("conversations")
     .update({ last_message: content, last_message_at: new Date().toISOString() })
@@ -163,7 +231,8 @@ export function formatMessageTime(iso: string): string {
     d.getMonth() === yesterday.getMonth() &&
     d.getFullYear() === yesterday.getFullYear()
 
-  if (isYesterday) return `Yesterday ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+  if (isYesterday)
+    return `Yesterday ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
 
   const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
   if (diffDays < 7) return `${diffDays}d ago`
