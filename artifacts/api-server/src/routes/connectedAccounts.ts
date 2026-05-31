@@ -18,8 +18,9 @@ const VALID_PROVIDERS: Provider[] = ["whatsapp", "facebook", "instagram", "tikto
 
 const META_SCOPES: Record<string, string> = {
   whatsapp:  "whatsapp_business_messaging,whatsapp_business_management,pages_show_list",
-  facebook:  "email,public_profile,pages_show_list,pages_read_engagement",
-  instagram: "instagram_basic,instagram_content_publish,pages_show_list",
+  // leads_retrieval = access Lead Ads form submissions; ads_read = read ad account data for syncing
+  facebook:  "email,public_profile,pages_show_list,pages_read_engagement,leads_retrieval,ads_read",
+  instagram: "instagram_basic,instagram_content_publish,pages_show_list,leads_retrieval",
 }
 
 // ─── URL helpers ──────────────────────────────────────────

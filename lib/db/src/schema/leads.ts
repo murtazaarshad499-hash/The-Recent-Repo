@@ -29,6 +29,7 @@ export const leadsTable = pgTable("leads", {
   adSource: text("ad_source"),
   adSetName: text("ad_set_name"),
   adCreativeId: text("ad_creative_id"),
+  externalId: text("external_id"),
   aiSummary: text("ai_summary"),
   suggestedActions: text("suggested_actions").array().default([]),
   createdAt: timestamp("created_at").defaultNow(),

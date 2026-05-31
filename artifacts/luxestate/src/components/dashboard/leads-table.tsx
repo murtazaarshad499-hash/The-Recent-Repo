@@ -23,6 +23,7 @@ import {
   Loader2,
   Globe,
   MousePointerClick,
+  RefreshCw,
 } from "lucide-react"
 import { Link, useLocation } from "wouter"
 import { Button } from "@/components/ui/button"
@@ -64,6 +65,7 @@ type LeadsTableProps = {
   onDelete: (id: number) => Promise<void>
   onBulkDelete?: (ids: number[]) => Promise<void>
   onImport?: (leads: Lead[]) => Promise<void>
+  onSync?: () => Promise<void>
 }
 
 type SortKey = "urgencyScore" | "score" | "name" | "budget" | "lastContact"
@@ -140,8 +142,9 @@ function exportCSV(leads: Lead[]) {
   URL.revokeObjectURL(url)
 }
 
-export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpdate, onDelete, onBulkDelete, onImport }: LeadsTableProps) {
+export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpdate, onDelete, onBulkDelete, onImport, onSync }: LeadsTableProps) {
   const isLoading = externalLoading ?? false
+  const [isSyncing, setIsSyncing] = useState(false)
   const [, navigate] = useLocation()
   const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState("")
@@ -329,6 +332,22 @@ export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpda
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Import</span>
           </Button>
+          {onSync && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isSyncing}
+              title="Sync leads from connected ad platforms (Facebook, Instagram)"
+              className="h-9 gap-1.5 border-border/50"
+              onClick={async () => {
+                setIsSyncing(true)
+                try { await onSync() } finally { setIsSyncing(false) }
+              }}
+            >
+              <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+              <span className="hidden sm:inline">{isSyncing ? "Syncing…" : "Sync Ads"}</span>
+            </Button>
+          )}
           <Button
             className="h-9 gap-1.5 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25"
             onClick={() => setShowAddLead(true)}
@@ -635,8 +654,13 @@ export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpda
                       <td className="px-3 py-3">
                         <SourceBadge source={lead.source} />
                         {lead.campaign && (
-                          <p className="mt-1 max-w-[120px] truncate text-[10px] text-muted-foreground">
-                            {lead.campaign}
+                          <p className="mt-1 max-w-[140px] truncate text-[10px] font-medium text-muted-foreground" title={lead.campaign}>
+                            📢 {lead.campaign}
+                          </p>
+                        )}
+                        {lead.adSetName && (
+                          <p className="mt-0.5 max-w-[140px] truncate text-[10px] text-muted-foreground/70" title={lead.adSetName}>
+                            {lead.adSetName}
                           </p>
                         )}
                       </td>

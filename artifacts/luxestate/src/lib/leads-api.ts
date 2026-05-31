@@ -103,3 +103,19 @@ export function useBulkImportLeads() {
     },
   });
 }
+
+export function useSyncLeads() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ ok: boolean; message: string }>("/lead-sync/trigger", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      // Refetch leads after a short delay to pick up newly synced leads
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["leads"] });
+      }, 3000);
+    },
+  });
+}

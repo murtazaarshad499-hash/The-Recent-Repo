@@ -6,6 +6,7 @@ import propertiesRouter from "./properties";
 import storageRouter from "./storage";
 import connectedAccountsRouter from "./connectedAccounts";
 import whatsappRouter from "./whatsapp";
+import leadSyncRouter from "./leadSync";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(propertiesRouter);
 router.use(storageRouter);
 router.use(connectedAccountsRouter);
 router.use(whatsappRouter);
+router.use(leadSyncRouter);
 
 export default router;

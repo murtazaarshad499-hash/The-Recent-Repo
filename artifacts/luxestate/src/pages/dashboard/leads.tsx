@@ -10,6 +10,7 @@ import {
   useDeleteLead,
   useBulkDeleteLeads,
   useBulkImportLeads,
+  useSyncLeads,
   CreateLeadInput,
   UpdateLeadInput,
 } from "@/lib/leads-api"
@@ -25,6 +26,7 @@ export default function LeadsPage() {
   const deleteLead = useDeleteLead()
   const bulkDelete = useBulkDeleteLeads()
   const bulkImport = useBulkImportLeads()
+  const syncLeads = useSyncLeads()
 
   const stats = [
     {
@@ -126,6 +128,15 @@ export default function LeadsPage() {
     }
   }
 
+  const handleSync = async (): Promise<void> => {
+    try {
+      await syncLeads.mutateAsync()
+      toast.success("Syncing leads from connected ad platforms — new leads will appear shortly.")
+    } catch {
+      toast.error("Sync failed. Make sure your Facebook or Instagram account is connected.")
+    }
+  }
+
   return (
     <div className="space-y-5">
       <DashboardPageHeader
@@ -165,6 +176,7 @@ export default function LeadsPage() {
           onDelete={handleDelete}
           onBulkDelete={handleBulkDelete}
           onImport={handleImport}
+          onSync={handleSync}
         />
       </motion.div>
     </div>
