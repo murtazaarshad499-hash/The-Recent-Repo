@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 import {
   Globe, RefreshCw, AlertTriangle, CheckCircle2, Clock, Zap,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { DashboardPageHeader } from "@/components/dashboard/page-header"
 import { PlatformIcon } from "@/components/dashboard/integration-connect-modal"
 import { IntegrationConnectModal } from "@/components/dashboard/integration-connect-modal"
+import { MetaPreConnectModal, MetaPostConnectModal } from "@/components/dashboard/meta-oauth-modals"
 import {
   Platform, Integration, ConnectionStatus, SyncEvent,
   PLATFORM_CONFIGS, getIntegrations, saveIntegrations,
@@ -24,7 +26,41 @@ import {
   formatRelativeTime, formatNextSync, isOverdueForSync,
   simulateSyncLeads, getNextSyncTime,
 } from "@/components/dashboard/integrations-data"
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import {
+  useConnectedAccounts, useDisconnectAccount,
+  type ConnectedAccount,
+} from "@/lib/connected-accounts-api"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
+
+// ── Which platforms use real OAuth ───────────────────────────────────────
+const META_PLATFORMS = new Set<Platform>(["facebook", "instagram", "whatsapp"])
+const ALL_PLATFORMS: Platform[] = ["facebook", "instagram", "tiktok", "whatsapp", "website"]
+
+// ── Map a real connected account → display Integration ───────────────────
+function realAccountToIntegration(account: ConnectedAccount): Integration {
+  const meta = (account.metadata ?? {}) as Record<string, any>
+  return {
+    id: account.id,
+    platform: account.provider as Platform,
+    status: "connected",
+    accountName: account.account_name ?? account.provider,
+    accountId: account.account_id ?? account.id,
+    adAccountName: meta.selected_ad_account_name ?? undefined,
+    connectedAt: account.created_at,
+    lastSync: account.last_synced_at,
+    nextSync: meta.sync_interval_minutes
+      ? getNextSyncTime(meta.sync_interval_minutes as number)
+      : null,
+    leadsTotal: 0,
+    leadsSyncedToday: 0,
+    leadsSyncedThisWeek: 0,
+    campaigns: [],
+    syncIntervalMinutes: (meta.sync_interval_minutes as number) ?? 30,
+    defaultPipeline: (meta.default_pipeline as string) ?? "new",
+    defaultAgent: (meta.default_agent as string) ?? "",
+    extraTags: [],
+  }
+}
 
 // ── Status helpers ────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<ConnectionStatus, { label: string; color: string; dot: string; ring?: string }> = {
@@ -36,9 +72,15 @@ const STATUS_CONFIG: Record<ConnectionStatus, { label: string; color: string; do
   paused:       { label: "Paused",        color: "text-amber-400",        dot: "bg-amber-400" },
 }
 
-const PLATFORMS: Platform[] = ["facebook", "instagram", "tiktok", "whatsapp", "website"]
+const CHART_COLORS: Record<Platform, string> = {
+  facebook:  "#3b82f6",
+  instagram: "#ec4899",
+  tiktok:    "#71717a",
+  whatsapp:  "#22c55e",
+  website:   "#6366f1",
+}
 
-// ── Analytics chart data (last 7 days, simulated) ─────────────────────────
+// ── Analytics chart data ──────────────────────────────────────────────────
 function buildChartData(integrations: Integration[]) {
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date()
@@ -62,18 +104,11 @@ function buildChartData(integrations: Integration[]) {
   })
 }
 
-const CHART_COLORS: Record<Platform, string> = {
-  facebook:  "#3b82f6",
-  instagram: "#ec4899",
-  tiktok:    "#71717a",
-  whatsapp:  "#22c55e",
-  website:   "#6366f1",
-}
-
 // ── Integration Card ──────────────────────────────────────────────────────
 function IntegrationCard({
   platform,
   integration,
+  isRealAccount,
   onConnect,
   onSync,
   onDisconnect,
@@ -81,6 +116,7 @@ function IntegrationCard({
 }: {
   platform: Platform
   integration: Integration | null
+  isRealAccount: boolean
   onConnect: () => void
   onSync: () => void
   onDisconnect: () => void
@@ -111,8 +147,10 @@ function IntegrationCard({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Status dot */}
-          <div className={cn("flex items-center gap-1.5 rounded-full px-2 py-0.5 border text-[10px] font-medium", isConnected ? "border-emerald-500/20 bg-emerald-500/5" : "border-border/30 bg-secondary/20")}>
+          <div className={cn(
+            "flex items-center gap-1.5 rounded-full px-2 py-0.5 border text-[10px] font-medium",
+            isConnected ? "border-emerald-500/20 bg-emerald-500/5" : "border-border/30 bg-secondary/20"
+          )}>
             <span className={cn(
               "h-1.5 w-1.5 rounded-full",
               sc.dot,
@@ -122,7 +160,6 @@ function IntegrationCard({
             <span className={sc.color}>{sc.label}</span>
           </div>
 
-          {/* Menu */}
           {isConnected && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -131,10 +168,12 @@ function IntegrationCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onClick={onSync} disabled={isSyncing} className="gap-2 text-sm">
-                  <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
-                  {isSyncing ? "Syncing…" : "Sync now"}
-                </DropdownMenuItem>
+                {!isRealAccount && (
+                  <DropdownMenuItem onClick={onSync} disabled={isSyncing} className="gap-2 text-sm">
+                    <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
+                    {isSyncing ? "Syncing…" : "Sync now"}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={onReconnect} className="gap-2 text-sm">
                   <Link2 className="h-3.5 w-3.5" /> Reconnect
                 </DropdownMenuItem>
@@ -159,38 +198,51 @@ function IntegrationCard({
             )}
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-1.5">
-            <div className="flex flex-col items-center gap-0.5 rounded-lg border border-border/30 bg-secondary/10 px-2 py-2">
-              <span className="text-base font-bold tabular-nums text-foreground">{integration.leadsTotal}</span>
-              <span className="text-[9px] text-muted-foreground text-center">Total Leads</span>
+          {/* Stats — real accounts show 0 until Lead Ads sync is enabled */}
+          {!isRealAccount && (
+            <div className="grid grid-cols-3 gap-1.5">
+              <div className="flex flex-col items-center gap-0.5 rounded-lg border border-border/30 bg-secondary/10 px-2 py-2">
+                <span className="text-base font-bold tabular-nums text-foreground">{integration.leadsTotal}</span>
+                <span className="text-[9px] text-muted-foreground text-center">Total Leads</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5 rounded-lg border border-border/30 bg-secondary/10 px-2 py-2">
+                <span className="text-base font-bold tabular-nums text-emerald-400">{integration.leadsSyncedToday}</span>
+                <span className="text-[9px] text-muted-foreground text-center">Today</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5 rounded-lg border border-border/30 bg-secondary/10 px-2 py-2">
+                <span className={cn("text-base font-bold tabular-nums", isSyncing ? "text-sky-400" : "text-muted-foreground")}>
+                  {isSyncing ? <RefreshCw className="h-4 w-4 animate-spin mx-auto" /> : formatNextSync(integration.nextSync)}
+                </span>
+                <span className="text-[9px] text-muted-foreground text-center">Next Sync</span>
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-0.5 rounded-lg border border-border/30 bg-secondary/10 px-2 py-2">
-              <span className="text-base font-bold tabular-nums text-emerald-400">{integration.leadsSyncedToday}</span>
-              <span className="text-[9px] text-muted-foreground text-center">Today</span>
+          )}
+
+          {isRealAccount && (
+            <div className="flex items-start gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2">
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-400" />
+              <p className="text-[11px] text-sky-400 leading-relaxed">
+                OAuth connected. Lead Ads syncing will begin once configured.
+              </p>
             </div>
-            <div className="flex flex-col items-center gap-0.5 rounded-lg border border-border/30 bg-secondary/10 px-2 py-2">
-              <span className={cn("text-base font-bold tabular-nums", isSyncing ? "text-sky-400" : "text-muted-foreground")}>
-                {isSyncing ? <RefreshCw className="h-4 w-4 animate-spin mx-auto" /> : formatNextSync(integration.nextSync)}
+          )}
+
+          {/* Sync time (simulated only) */}
+          {!isRealAccount && (
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Last sync: {formatRelativeTime(integration.lastSync)}
               </span>
-              <span className="text-[9px] text-muted-foreground text-center">Next Sync</span>
+              <span className="flex items-center gap-1 text-sky-400 cursor-pointer hover:text-sky-300 transition-colors" onClick={onSync}>
+                <RefreshCw className={cn("h-3 w-3", isSyncing && "animate-spin")} />
+                {isSyncing ? "Syncing…" : "Sync now"}
+              </span>
             </div>
-          </div>
+          )}
 
-          {/* Sync time */}
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              Last sync: {formatRelativeTime(integration.lastSync)}
-            </span>
-            <span className="flex items-center gap-1 text-sky-400 cursor-pointer hover:text-sky-300 transition-colors" onClick={onSync}>
-              <RefreshCw className={cn("h-3 w-3", isSyncing && "animate-spin")} />
-              {isSyncing ? "Syncing…" : "Sync now"}
-            </span>
-          </div>
-
-          {/* Campaign badges */}
-          {integration.campaigns.length > 0 && (
+          {/* Campaign badges (simulated only) */}
+          {!isRealAccount && integration.campaigns.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {integration.campaigns.slice(0, 3).map((c) => (
                 <Badge key={c} variant="outline" className="text-[9px] px-1.5 py-0 border-border/30 text-muted-foreground">
@@ -265,28 +317,98 @@ function SyncLogRow({ event }: { event: SyncEvent }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────
 export default function IntegrationsPage() {
-  const [integrations, setIntegrations] = useState<Integration[]>(() => getIntegrations())
+  const qc = useQueryClient()
+
+  // ── Real Meta accounts from API ───────────────────────────────────────
+  const { data: realAccounts = [], isLoading: accountsLoading } = useConnectedAccounts()
+  const disconnectAccount = useDisconnectAccount()
+
+  // ── Simulated accounts (TikTok, Website only) ─────────────────────────
+  const [simulatedIntegrations, setSimulatedIntegrations] = useState<Integration[]>(() =>
+    getIntegrations().filter((i) => !META_PLATFORMS.has(i.platform))
+  )
   const [syncLog, setSyncLog] = useState<SyncEvent[]>(() => getSyncLog())
-  const [connectingPlatform, setConnectingPlatform] = useState<Platform | null>(null)
+
+  // ── Modal state ───────────────────────────────────────────────────────
+  const [metaPreOpen, setMetaPreOpen] = useState<Platform | null>(null)
+  const [postOAuthAccount, setPostOAuthAccount] = useState<ConnectedAccount | null>(null)
+  const [simulatedModal, setSimulatedModal] = useState<Platform | null>(null)
+
+  // ── URL param handling (OAuth callback) ───────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const connected = params.get("connected") as Platform | null
+    const error = params.get("error")
+    const provider = params.get("provider") as Platform | null
+
+    if (connected || error) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete("connected")
+      url.searchParams.delete("error")
+      url.searchParams.delete("provider")
+      url.searchParams.delete("tab")
+      window.history.replaceState({}, "", url.toString())
+    }
+
+    if (connected && META_PLATFORMS.has(connected)) {
+      qc.invalidateQueries({ queryKey: ["connectedAccounts"] })
+    }
+
+    if (error) {
+      console.warn(`OAuth error for ${provider ?? "unknown"}:`, error)
+    }
+  }, [qc])
+
+  // Open post-OAuth modal once real account appears after callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    // Params already cleared above; use a ref to remember the initial connected value
+  }, [])
+
+  // Separate effect: once real accounts load and we have a freshly connected provider,
+  // open the configure modal. We track it via sessionStorage to survive the redirect.
+  useEffect(() => {
+    const pendingProvider = sessionStorage.getItem("meta_oauth_pending") as Platform | null
+    if (!pendingProvider || accountsLoading) return
+
+    const account = realAccounts.find((a) => a.provider === pendingProvider)
+    if (account) {
+      sessionStorage.removeItem("meta_oauth_pending")
+      setPostOAuthAccount(account)
+    }
+  }, [realAccounts, accountsLoading])
+
+  // Store pending provider before redirect so we can open configure modal after return
+  const handleMetaConnect = (platform: Platform) => {
+    sessionStorage.setItem("meta_oauth_pending", platform)
+    setMetaPreOpen(platform)
+  }
+
+  // On page load, read URL params and set pending if needed
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const connected = params.get("connected") as Platform | null
+    if (connected && META_PLATFORMS.has(connected)) {
+      sessionStorage.setItem("meta_oauth_pending", connected)
+    }
+  }, [])
+
+  // ── Simulated auto-sync (TikTok + Website only) ───────────────────────
   const syncTimerRef = useRef<number | null>(null)
 
-  const getIntegration = (p: Platform) => integrations.find((i) => i.platform === p) ?? null
-
-  const refreshState = useCallback(() => {
-    setIntegrations(getIntegrations())
+  const refreshSimulated = useCallback(() => {
+    setSimulatedIntegrations(getIntegrations().filter((i) => !META_PLATFORMS.has(i.platform)))
     setSyncLog(getSyncLog())
   }, [])
 
-  // Auto-sync polling every 60 seconds
   useEffect(() => {
     const tick = () => {
-      const all = getIntegrations()
+      const all = getIntegrations().filter((i) => !META_PLATFORMS.has(i.platform))
       let changed = false
       all.forEach((intg) => {
         if (isOverdueForSync(intg)) {
           intg.status = "syncing"
           changed = true
-          // Complete sync after 3 seconds
           setTimeout(() => {
             const current = getIntegrations().find((i) => i.platform === intg.platform)
             if (current) {
@@ -310,30 +432,64 @@ export default function IntegrationsPage() {
                 status: "success",
                 message: `Auto-sync completed — ${leads} new lead${leads !== 1 ? "s" : ""} captured`,
               })
-              refreshState()
+              refreshSimulated()
             }
           }, 3000)
         }
       })
-      if (changed) { saveIntegrations(all); refreshState() }
+      if (changed) {
+        saveIntegrations([...all, ...getIntegrations().filter((i) => META_PLATFORMS.has(i.platform))])
+        refreshSimulated()
+      }
     }
 
     tick()
     syncTimerRef.current = window.setInterval(tick, 60_000)
     return () => { if (syncTimerRef.current) clearInterval(syncTimerRef.current) }
-  }, [refreshState])
+  }, [refreshSimulated])
 
-  const handleConnected = (integration: Integration) => {
-    refreshState()
-    setConnectingPlatform(null)
+  // ── Merge real + simulated integrations for display ───────────────────
+  const realIntegrations = realAccounts
+    .filter((a) => META_PLATFORMS.has(a.provider as Platform))
+    .map(realAccountToIntegration)
+
+  const allIntegrations: Integration[] = [...realIntegrations, ...simulatedIntegrations]
+
+  const getIntegrationDisplay = (p: Platform): { integration: Integration | null; isReal: boolean } => {
+    const real = realIntegrations.find((i) => i.platform === p)
+    if (real) return { integration: real, isReal: true }
+    const sim = simulatedIntegrations.find((i) => i.platform === p)
+    return { integration: sim ?? null, isReal: false }
+  }
+
+  const getRealAccount = (p: Platform) => realAccounts.find((a) => a.provider === p) ?? null
+
+  // ── Handlers ──────────────────────────────────────────────────────────
+  const handleConnect = (platform: Platform) => {
+    if (META_PLATFORMS.has(platform)) {
+      handleMetaConnect(platform)
+    } else {
+      setSimulatedModal(platform)
+    }
+  }
+
+  const handleDisconnect = async (platform: Platform) => {
+    if (META_PLATFORMS.has(platform)) {
+      const account = getRealAccount(platform)
+      if (account) await disconnectAccount.mutateAsync(account.id).catch(() => null)
+    } else {
+      removeIntegration(platform)
+      refreshSimulated()
+    }
   }
 
   const handleSync = (platform: Platform) => {
-    const intg = getIntegration(platform)
+    if (META_PLATFORMS.has(platform)) return
+    const intg = simulatedIntegrations.find((i) => i.platform === platform)
     if (!intg) return
     const updated = { ...intg, status: "syncing" as ConnectionStatus }
-    const rest = integrations.filter((i) => i.platform !== platform)
-    setIntegrations([...rest, updated])
+    const rest = simulatedIntegrations.filter((i) => i.platform !== platform)
+    setSimulatedIntegrations([...rest, updated])
     saveIntegrations([...rest, updated])
 
     setTimeout(() => {
@@ -357,17 +513,17 @@ export default function IntegrationsPage() {
         status: "success",
         message: `Manual sync — ${leads} new lead${leads !== 1 ? "s" : ""} captured`,
       })
-      refreshState()
+      refreshSimulated()
     }, 3000)
   }
 
-  const handleDisconnect = (platform: Platform) => {
-    removeIntegration(platform)
-    refreshState()
+  const handleSimulatedConnected = (integration: Integration) => {
+    refreshSimulated()
+    setSimulatedModal(null)
   }
 
-  // ── Derived stats ──────────────────────────────────────────────────────
-  const connected = integrations.filter((i) => i.status === "connected" || i.status === "syncing")
+  // ── Derived stats ─────────────────────────────────────────────────────
+  const connected = allIntegrations.filter((i) => i.status === "connected" || i.status === "syncing")
   const totalLeadsToday = connected.reduce((s, i) => s + i.leadsSyncedToday, 0)
   const totalLeadsWeek = connected.reduce((s, i) => s + i.leadsSyncedThisWeek, 0)
   const totalLeadsAll = connected.reduce((s, i) => s + i.leadsTotal, 0)
@@ -376,10 +532,10 @@ export default function IntegrationsPage() {
     .filter((i) => i.nextSync)
     .sort((a, b) => new Date(a.nextSync!).getTime() - new Date(b.nextSync!).getTime())[0]
 
-  const chartData = buildChartData(integrations)
+  const chartData = buildChartData(allIntegrations)
 
   const pageStats = [
-    { label: "Connected Sources", value: `${connected.length} / ${PLATFORMS.length}`, icon: Link2, color: "text-primary", bg: "bg-primary/10" },
+    { label: "Connected Sources", value: `${connected.length} / ${ALL_PLATFORMS.length}`, icon: Link2, color: "text-primary", bg: "bg-primary/10" },
     { label: "Leads Today", value: totalLeadsToday, icon: Users, color: "text-emerald-500", bg: "bg-emerald-500/10" },
     { label: "Leads This Week", value: totalLeadsWeek, icon: TrendingUp, color: "text-sky-500", bg: "bg-sky-500/10" },
     { label: "Total Synced", value: totalLeadsAll, icon: Zap, color: "text-amber-500", bg: "bg-amber-500/10" },
@@ -427,26 +583,30 @@ export default function IntegrationsPage() {
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Lead Channels</h2>
-          <span className="text-xs text-muted-foreground">{connected.length} of {PLATFORMS.length} connected</span>
+          <span className="text-xs text-muted-foreground">{connected.length} of {ALL_PLATFORMS.length} connected</span>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {PLATFORMS.map((platform, i) => (
-            <motion.div
-              key={platform}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 + i * 0.05 }}
-            >
-              <IntegrationCard
-                platform={platform}
-                integration={getIntegration(platform)}
-                onConnect={() => setConnectingPlatform(platform)}
-                onSync={() => handleSync(platform)}
-                onDisconnect={() => handleDisconnect(platform)}
-                onReconnect={() => setConnectingPlatform(platform)}
-              />
-            </motion.div>
-          ))}
+          {ALL_PLATFORMS.map((platform, i) => {
+            const { integration, isReal } = getIntegrationDisplay(platform)
+            return (
+              <motion.div
+                key={platform}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + i * 0.05 }}
+              >
+                <IntegrationCard
+                  platform={platform}
+                  integration={integration}
+                  isRealAccount={isReal}
+                  onConnect={() => handleConnect(platform)}
+                  onSync={() => handleSync(platform)}
+                  onDisconnect={() => handleDisconnect(platform)}
+                  onReconnect={() => handleConnect(platform)}
+                />
+              </motion.div>
+            )
+          })}
 
           {/* Coming soon */}
           <motion.div
@@ -528,71 +688,28 @@ export default function IntegrationsPage() {
                     dataKey={PLATFORM_CONFIGS[intg.platform].name}
                     stackId="a"
                     fill={CHART_COLORS[intg.platform]}
-                    radius={connected.indexOf(intg) === connected.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
-                    fillOpacity={0.85}
+                    radius={[2, 2, 0, 0]}
                   />
                 ))}
               </BarChart>
             </ResponsiveContainer>
           )}
-
-          {/* Source table */}
-          {connected.length > 0 && (
-            <div className="mt-4 rounded-lg border border-border/30 overflow-hidden">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border/30 bg-secondary/20">
-                    <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Source</th>
-                    <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Today</th>
-                    <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">This Week</th>
-                    <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total</th>
-                    <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Last Sync</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {connected.map((intg) => (
-                    <tr key={intg.platform} className="border-b border-border/20 last:border-0 hover:bg-secondary/10">
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full" style={{ background: CHART_COLORS[intg.platform] }} />
-                          <span className="font-medium">{PLATFORM_CONFIGS[intg.platform].name}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-emerald-400 font-semibold">+{intg.leadsSyncedToday}</td>
-                      <td className="px-3 py-2.5 text-right text-foreground">{intg.leadsSyncedThisWeek}</td>
-                      <td className="px-3 py-2.5 text-right font-semibold text-foreground">{intg.leadsTotal}</td>
-                      <td className="px-3 py-2.5 text-right text-muted-foreground">{formatRelativeTime(intg.lastSync)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
 
         {/* Sync log */}
         <div className="glass-card p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold">Sync Activity</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Recent sync events</p>
-            </div>
-            {syncing > 0 && (
-              <div className="flex items-center gap-1.5 text-xs text-sky-400">
-                <RefreshCw className="h-3 w-3 animate-spin" />
-                Syncing
-              </div>
-            )}
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">Sync Activity</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Recent sync events</p>
           </div>
 
           {syncLog.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12">
-              <Activity className="h-10 w-10 text-muted-foreground/20" />
-              <p className="text-sm text-muted-foreground">No sync activity yet</p>
-              <p className="text-xs text-muted-foreground/60">Connect a source to start syncing</p>
+            <div className="flex flex-col items-center justify-center gap-3 py-8">
+              <Activity className="h-8 w-8 text-muted-foreground/20" />
+              <p className="text-xs text-muted-foreground text-center">No sync events yet</p>
             </div>
           ) : (
-            <div className="max-h-[360px] overflow-y-auto pr-1">
+            <div className="overflow-y-auto max-h-[220px]">
               {syncLog.slice(0, 20).map((event) => (
                 <SyncLogRow key={event.id} event={event} />
               ))}
@@ -601,13 +718,34 @@ export default function IntegrationsPage() {
         </div>
       </motion.div>
 
-      {/* Connect modal */}
-      {connectingPlatform && (
+      {/* ── Modals ── */}
+
+      {/* Meta pre-OAuth modal */}
+      {metaPreOpen && (
+        <MetaPreConnectModal
+          platform={metaPreOpen}
+          open={!!metaPreOpen}
+          onClose={() => setMetaPreOpen(null)}
+        />
+      )}
+
+      {/* Meta post-OAuth configure modal */}
+      {postOAuthAccount && (
+        <MetaPostConnectModal
+          account={postOAuthAccount}
+          open={!!postOAuthAccount}
+          onClose={() => setPostOAuthAccount(null)}
+          onDone={() => setPostOAuthAccount(null)}
+        />
+      )}
+
+      {/* Simulated modal for TikTok / Website */}
+      {simulatedModal && !META_PLATFORMS.has(simulatedModal) && (
         <IntegrationConnectModal
-          platform={connectingPlatform}
-          open={true}
-          onClose={() => setConnectingPlatform(null)}
-          onConnected={handleConnected}
+          platform={simulatedModal}
+          open={!!simulatedModal}
+          onClose={() => setSimulatedModal(null)}
+          onConnected={handleSimulatedConnected}
         />
       )}
     </div>

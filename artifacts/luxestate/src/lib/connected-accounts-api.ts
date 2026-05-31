@@ -22,11 +22,28 @@ export type ConnectedAccount = {
   status: "active" | "expired" | "error"
   last_synced_at: string | null
   created_at: string
+  metadata?: Record<string, unknown> | null
 }
 
 export type OAuthUrlResult =
   | { configured: true; url: string }
   | { configured: false; error: string; envVars: string[] }
+
+export type FacebookPage = {
+  id: string
+  name: string
+  access_token?: string
+  category?: string
+  fan_count?: number
+}
+
+export type AdAccount = {
+  id: string
+  name: string
+  account_status?: number
+  currency?: string
+  lead_gen_enabled?: boolean
+}
 
 // ─── API functions ────────────────────────────────────────
 
@@ -49,6 +66,42 @@ export async function fetchOAuthUrl(provider: Provider, returnUrl: string): Prom
   return { configured: true, url: data.url }
 }
 
+export async function fetchPages(accountId: string): Promise<FacebookPage[]> {
+  const headers = await getAuthHeaders()
+  const res = await fetch(`${getBase()}/api/connected-accounts/${accountId}/pages`, { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as any
+    throw new Error(err.error || "Failed to fetch pages")
+  }
+  return res.json()
+}
+
+export async function fetchAdAccounts(accountId: string): Promise<AdAccount[]> {
+  const headers = await getAuthHeaders()
+  const res = await fetch(`${getBase()}/api/connected-accounts/${accountId}/ad-accounts`, { headers })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as any
+    throw new Error(err.error || "Failed to fetch ad accounts")
+  }
+  return res.json()
+}
+
+export async function saveAccountMetadata(
+  accountId: string,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  const headers = await getAuthHeaders()
+  const res = await fetch(`${getBase()}/api/connected-accounts/${accountId}/metadata`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(metadata),
+  })
+  if (!res.ok && res.status !== 204) {
+    const err = await res.json().catch(() => ({})) as any
+    throw new Error(err.error || "Failed to save metadata")
+  }
+}
+
 async function deleteConnectedAccount(id: string): Promise<void> {
   const headers = await getAuthHeaders()
   const res = await fetch(`${getBase()}/api/connected-accounts/${id}`, {
@@ -69,10 +122,41 @@ export function useConnectedAccounts() {
   })
 }
 
+export function usePages(accountId: string | null) {
+  return useQuery<FacebookPage[]>({
+    queryKey: ["pages", accountId],
+    queryFn: () => fetchPages(accountId!),
+    enabled: !!accountId,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+export function useAdAccounts(accountId: string | null) {
+  return useQuery<AdAccount[]>({
+    queryKey: ["adAccounts", accountId],
+    queryFn: () => fetchAdAccounts(accountId!),
+    enabled: !!accountId,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
 export function useDisconnectAccount() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: deleteConnectedAccount,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["connectedAccounts"] })
+    },
+  })
+}
+
+export function useSaveAccountMetadata() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ accountId, metadata }: { accountId: string; metadata: Record<string, unknown> }) =>
+      saveAccountMetadata(accountId, metadata),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["connectedAccounts"] })
     },

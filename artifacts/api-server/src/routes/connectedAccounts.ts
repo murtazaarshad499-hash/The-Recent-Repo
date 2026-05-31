@@ -284,6 +284,86 @@ router.get("/connected-accounts/callback/:provider", async (req, res) => {
   }
 })
 
+// GET /api/connected-accounts/:id/pages
+router.get("/connected-accounts/:id/pages", requireAuth, async (req: any, res) => {
+  const { data: account, error } = await supabaseAdmin
+    .from("connected_accounts")
+    .select("access_token, provider, user_id")
+    .eq("id", req.params.id)
+    .eq("user_id", req.userId)
+    .single()
+
+  if (error || !account) return res.status(404).json({ error: "Account not found" })
+  if (account.provider !== "facebook" && account.provider !== "instagram") {
+    return res.status(400).json({ error: "Pages only available for Facebook/Instagram accounts" })
+  }
+
+  try {
+    const pagesRes = await fetch(
+      `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,category,fan_count&access_token=${account.access_token}`
+    )
+    const pagesJson = await pagesRes.json() as any
+    if (pagesJson.error) throw new Error(pagesJson.error.message)
+    return res.json(pagesJson.data ?? [])
+  } catch (err: any) {
+    return res.status(502).json({ error: err.message ?? "Failed to fetch pages" })
+  }
+})
+
+// GET /api/connected-accounts/:id/ad-accounts
+router.get("/connected-accounts/:id/ad-accounts", requireAuth, async (req: any, res) => {
+  const { data: account, error } = await supabaseAdmin
+    .from("connected_accounts")
+    .select("access_token, provider, user_id, account_id")
+    .eq("id", req.params.id)
+    .eq("user_id", req.userId)
+    .single()
+
+  if (error || !account) return res.status(404).json({ error: "Account not found" })
+
+  try {
+    const userId = account.account_id
+    const adAccRes = await fetch(
+      `https://graph.facebook.com/v18.0/${userId}/adaccounts?fields=id,name,account_status,currency,lead_gen_enabled&access_token=${account.access_token}`
+    )
+    const adAccJson = await adAccRes.json() as any
+    if (adAccJson.error) throw new Error(adAccJson.error.message)
+    return res.json(adAccJson.data ?? [])
+  } catch (err: any) {
+    return res.status(502).json({ error: err.message ?? "Failed to fetch ad accounts" })
+  }
+})
+
+// PATCH /api/connected-accounts/:id/metadata
+router.patch("/connected-accounts/:id/metadata", requireAuth, async (req: any, res) => {
+  const allowed = ["selected_page_id", "selected_page_name", "selected_ad_account_id",
+                   "selected_ad_account_name", "sync_interval_minutes", "default_pipeline",
+                   "default_agent", "extra_tags"]
+  const patch: Record<string, unknown> = {}
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) patch[key] = req.body[key]
+  }
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: "No valid fields" })
+
+  const { data: existing } = await supabaseAdmin
+    .from("connected_accounts")
+    .select("metadata, user_id")
+    .eq("id", req.params.id)
+    .eq("user_id", req.userId)
+    .single()
+
+  if (!existing) return res.status(404).json({ error: "Account not found" })
+
+  const { error } = await supabaseAdmin
+    .from("connected_accounts")
+    .update({ metadata: { ...(existing.metadata as object ?? {}), ...patch } })
+    .eq("id", req.params.id)
+    .eq("user_id", req.userId)
+
+  if (error) return res.status(500).json({ error: error.message })
+  return res.status(204).send()
+})
+
 // DELETE /api/connected-accounts/:id
 router.delete("/connected-accounts/:id", requireAuth, async (req: any, res) => {
   const { error } = await supabaseAdmin
