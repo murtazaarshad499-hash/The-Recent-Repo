@@ -5,6 +5,7 @@ import usersRouter from "./users";
 import propertiesRouter from "./properties";
 import storageRouter from "./storage";
 import connectedAccountsRouter from "./connectedAccounts";
+import whatsappRouter from "./whatsapp";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(usersRouter);
 router.use(propertiesRouter);
 router.use(storageRouter);
 router.use(connectedAccountsRouter);
+router.use(whatsappRouter);
 
 export default router;

@@ -20,6 +20,8 @@ export type Conversation = {
   lead_id: number | null
   title: string | null
   status: "active" | "pending" | "resolved"
+  channel: "crm" | "whatsapp"
+  whatsapp_conversation_id: string | null
   linked_property: string | null
   last_message: string | null
   last_message_at: string
@@ -34,7 +36,21 @@ export type Message = {
   content: string
   type: "text" | "template" | "note"
   status: "sent" | "delivered" | "read"
+  direction: "inbound" | "outbound"
+  whatsapp_message_id: string | null
   created_at: string
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+
+function getBase(): string {
+  return import.meta.env.BASE_URL.replace(/\/$/, "")
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return {}
+  return { Authorization: `Bearer ${session.access_token}` }
 }
 
 // ─── Conversations ────────────────────────────────────────
@@ -80,6 +96,7 @@ export async function createConversation(
       user_id: userId,
       contact_id: contact.id,
       lead_id: null,
+      channel: "crm",
       title: contactData.name,
       status: "active",
       linked_property: contactData.linked_property || null,
@@ -107,7 +124,6 @@ export async function getOrCreateConversationForLead(
     property?: string
   }
 ): Promise<Conversation> {
-  // Check for existing conversation tied to this lead
   const { data: existing, error: fe } = await supabase
     .from("conversations")
     .select("*, contact:contacts(*)")
@@ -118,7 +134,6 @@ export async function getOrCreateConversationForLead(
   if (fe) throw fe
   if (existing) return existing as Conversation
 
-  // Create contact entry
   const initials = lead.name
     .split(" ")
     .map((n) => n[0])
@@ -140,13 +155,13 @@ export async function getOrCreateConversationForLead(
 
   if (ce) throw ce
 
-  // Create conversation linked to lead
   const { data: conv, error: ve } = await supabase
     .from("conversations")
     .insert({
       user_id: userId,
       contact_id: contact.id,
       lead_id: lead.id,
+      channel: "crm",
       title: lead.name,
       status: "active",
       linked_property: lead.property || null,
@@ -185,11 +200,45 @@ export async function sendMessage(
   conversationId: string,
   senderId: string,
   content: string,
-  type: "text" | "template" | "note" = "text"
+  type: "text" | "template" | "note" = "text",
+  channel: "crm" | "whatsapp" = "crm"
 ): Promise<Message> {
+  // Route WhatsApp messages through the API server
+  if (channel === "whatsapp" && type !== "note") {
+    const headers = await getAuthHeaders()
+    const res = await fetch(`${getBase()}/api/whatsapp/send`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, content }),
+    })
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({})) as any
+      throw new Error(errJson?.error ?? "Failed to send WhatsApp message")
+    }
+
+    const { message } = await res.json() as { message: Message }
+
+    // Update conversation last_message client-side
+    await supabase
+      .from("conversations")
+      .update({ last_message: content, last_message_at: new Date().toISOString() })
+      .eq("id", conversationId)
+
+    return message
+  }
+
+  // Standard CRM message — insert directly into Supabase
   const { data, error } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, content, type, status: "sent" })
+    .insert({
+      conversation_id: conversationId,
+      sender_id: senderId,
+      content,
+      type,
+      status: "sent",
+      direction: "outbound",
+    })
     .select()
     .single()
 

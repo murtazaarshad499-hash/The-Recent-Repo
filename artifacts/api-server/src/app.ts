@@ -1,8 +1,16 @@
-import express, { type Express } from "express";
+import express, { type Express, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+
+// ── Startup env var checks ────────────────────────────────
+const requiredWhatsAppVars = ["WHATSAPP_WEBHOOK_VERIFY_TOKEN", "FACEBOOK_APP_SECRET"];
+for (const v of requiredWhatsAppVars) {
+  if (!process.env[v]) {
+    logger.warn(`Missing env var: ${v} — WhatsApp webhook functionality will be degraded. Set it in your environment secrets.`);
+  }
+}
 
 const app: Express = express();
 
@@ -27,7 +35,11 @@ app.use(
 );
 
 app.use(cors({ credentials: true, origin: true }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req: any, _res: Response, buf: Buffer) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);

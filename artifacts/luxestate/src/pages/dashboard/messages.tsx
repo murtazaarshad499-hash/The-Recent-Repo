@@ -22,6 +22,7 @@ import {
   UserPlus,
   RefreshCw,
   ExternalLink,
+  Smartphone,
 } from "lucide-react"
 import { Link } from "wouter"
 import {
@@ -365,11 +366,13 @@ export default function MessagesPage() {
     setIsNoteMode(false)
 
     try {
+      const convChannel = selectedConv?.channel ?? "crm"
       const msg = await apiSendMessage(
         selectedId,
         user.id,
         content,
-        isNoteMode ? "note" : "text"
+        isNoteMode ? "note" : "text",
+        convChannel
       )
       // Optimistic update — real-time will also fire but dedup handles it
       setMessages((prev) => {
@@ -531,9 +534,14 @@ export default function MessagesPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {getContactName(conv)}
-                          </p>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {getContactName(conv)}
+                            </p>
+                            {conv.channel === "whatsapp" && (
+                              <Smartphone className="h-3 w-3 flex-shrink-0 text-green-500" aria-label="WhatsApp" />
+                            )}
+                          </div>
                           <span className="flex-shrink-0 text-xs text-muted-foreground">
                             {formatMessageTime(conv.last_message_at)}
                           </span>
@@ -656,7 +664,7 @@ export default function MessagesPage() {
                           "flex",
                           msg.type === "note"
                             ? "justify-center"
-                            : msg.sender_id === user?.id
+                            : msg.direction === "outbound"
                               ? "justify-end"
                               : "justify-start"
                         )}
@@ -670,13 +678,13 @@ export default function MessagesPage() {
                           <div
                             className={cn(
                               "flex max-w-xs flex-col gap-1 lg:max-w-md xl:max-w-lg",
-                              msg.sender_id === user?.id ? "items-end" : "items-start"
+                              msg.direction === "outbound" ? "items-end" : "items-start"
                             )}
                           >
                             <div
                               className={cn(
                                 "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-                                msg.sender_id === user?.id
+                                msg.direction === "outbound"
                                   ? "rounded-tr-md bg-primary text-primary-foreground"
                                   : "rounded-tl-md bg-secondary text-foreground"
                               )}
@@ -689,13 +697,13 @@ export default function MessagesPage() {
                             <div
                               className={cn(
                                 "flex items-center gap-1",
-                                msg.sender_id === user?.id ? "justify-end" : "justify-start"
+                                msg.direction === "outbound" ? "justify-end" : "justify-start"
                               )}
                             >
                               <span className="text-xs text-muted-foreground">
                                 {formatMessageTime(msg.created_at)}
                               </span>
-                              {msg.sender_id === user?.id && (
+                              {msg.direction === "outbound" && (
                                 <CheckCheck
                                   className={cn(
                                     "h-3.5 w-3.5",

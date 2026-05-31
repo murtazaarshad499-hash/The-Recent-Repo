@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { useLocation } from "wouter"
 import { Sidebar } from "@/components/dashboard/sidebar"
-import { WhatsAppWidget } from "@/components/dashboard/whatsapp-widget"
 import { NotificationsPanel, type Notification } from "@/components/dashboard/notifications-panel"
 import { ReactNode } from "react"
 import { motion } from "framer-motion"
@@ -267,7 +266,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </motion.main>
       </div>
-      <WhatsAppWidget />
     </div>
   )
 }

@@ -171,6 +171,7 @@ router.get("/connected-accounts/callback/:provider", async (req, res) => {
     let accessToken = ""
     let accountName = ""
     let accountId   = ""
+    let metadata: Record<string, unknown> | null = null
 
     // ── Meta (Facebook / Instagram / WhatsApp) ──────────
     if (provider === "facebook" || provider === "instagram" || provider === "whatsapp") {
@@ -193,6 +194,33 @@ router.get("/connected-accounts/callback/:provider", async (req, res) => {
       const profileJson = await profileRes.json() as any
       accountId   = String(profileJson.id ?? "")
       accountName = String(profileJson.name ?? "")
+
+      // ── For WhatsApp: resolve phone_number_id and WABA ID ──
+      if (provider === "whatsapp") {
+        try {
+          // Fetch WABA accounts linked to this user token
+          const wabaListRes  = await fetch(
+            `https://graph.facebook.com/v18.0/${accountId}/whatsapp_business_accounts?access_token=${accessToken}`
+          )
+          const wabaListJson = await wabaListRes.json() as any
+          const wabaId = wabaListJson?.data?.[0]?.id as string | undefined
+
+          if (wabaId) {
+            // Fetch phone numbers under this WABA
+            const phoneRes  = await fetch(
+              `https://graph.facebook.com/v18.0/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name&access_token=${accessToken}`
+            )
+            const phoneJson = await phoneRes.json() as any
+            const phoneNumId = phoneJson?.data?.[0]?.id as string | undefined
+
+            // Store in metadata for later use in send/webhook
+            metadata = { waba_id: wabaId, phone_number_id: phoneNumId ?? null }
+          }
+        } catch (waErr) {
+          // Non-fatal: account still stored, operators can configure manually
+          console.warn("Could not resolve WhatsApp phone_number_id:", waErr)
+        }
+      }
     }
 
     // ── TikTok ──────────────────────────────────────────
@@ -232,21 +260,21 @@ router.get("/connected-accounts/callback/:provider", async (req, res) => {
     }
 
     // ── Upsert into Supabase ─────────────────────────────
+    const upsertRow: Record<string, unknown> = {
+      user_id:        userId,
+      provider,
+      account_name:   accountName || null,
+      account_id:     accountId   || null,
+      access_token:   accessToken,
+      status:         "active",
+      last_synced_at: new Date().toISOString(),
+      updated_at:     new Date().toISOString(),
+    }
+    if (metadata !== null) upsertRow.metadata = metadata
+
     const { error: dbErr } = await supabaseAdmin
       .from("connected_accounts")
-      .upsert(
-        {
-          user_id:       userId,
-          provider,
-          account_name:  accountName || null,
-          account_id:    accountId   || null,
-          access_token:  accessToken,
-          status:        "active",
-          last_synced_at: new Date().toISOString(),
-          updated_at:    new Date().toISOString(),
-        },
-        { onConflict: "user_id,provider" }
-      )
+      .upsert(upsertRow, { onConflict: "user_id,provider" })
 
     if (dbErr) throw dbErr
 
