@@ -26,7 +26,9 @@ const META_SCOPES: Record<string, string> = {
 
 function getApiBaseUrl(): string {
   if (process.env.API_URL) return process.env.API_URL
-  if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}:8080`
+  // On Replit, port 8080 is exposed at externalPort 8080 and the proxy serves /api at port 80
+  // Meta OAuth requires a publicly reachable redirect_uri — use the Replit dev domain without port
+  if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`
   return "http://localhost:8080"
 }
 
