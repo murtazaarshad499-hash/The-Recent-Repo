@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { DashboardPageHeader } from "@/components/dashboard/page-header"
+import { ConnectedAccountsTab } from "@/components/dashboard/connected-accounts-tab"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useTheme } from "next-themes"
@@ -16,26 +17,57 @@ import {
   Sun,
   Moon,
   Monitor,
+  Link2,
 } from "lucide-react"
+import { toast } from "sonner"
 
 const tabs = [
-  { id: "profile", label: "Profile", icon: User },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "security", label: "Security", icon: Shield },
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
-  { id: "branding", label: "Branding", icon: Building2 },
+  { id: "profile",    label: "Profile",            icon: User },
+  { id: "accounts",   label: "Connected Accounts", icon: Link2 },
+  { id: "notifications", label: "Notifications",   icon: Bell },
+  { id: "security",   label: "Security",           icon: Shield },
+  { id: "appearance", label: "Appearance",         icon: Palette },
+  { id: "whatsapp",   label: "WhatsApp",           icon: MessageCircle },
+  { id: "branding",   label: "Branding",           icon: Building2 },
 ]
 
 const themeOptions = [
-  { id: "light", label: "Light", icon: Sun },
-  { id: "dark", label: "Dark", icon: Moon },
+  { id: "light",  label: "Light",  icon: Sun },
+  { id: "dark",   label: "Dark",   icon: Moon },
   { id: "system", label: "System", icon: Monitor },
 ]
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile")
   const { theme, setTheme } = useTheme()
+
+  // ── Parse URL params from OAuth redirect ─────────────────
+  const [connectedProvider, setConnectedProvider] = useState<string | null>(null)
+  const [oauthError, setOauthError]               = useState<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tab       = params.get("tab")
+    const connected = params.get("connected")
+    const error     = params.get("error")
+    const provider  = params.get("provider")
+
+    if (tab === "accounts" || connected || error) {
+      setActiveTab("accounts")
+
+      if (connected) {
+        setConnectedProvider(connected)
+        // Clean URL without reloading
+        const cleanUrl = window.location.pathname
+        window.history.replaceState({}, "", cleanUrl)
+      } else if (error) {
+        const msg = provider ? `${provider}: ${error}` : error
+        setOauthError(decodeURIComponent(msg))
+        const cleanUrl = window.location.pathname
+        window.history.replaceState({}, "", cleanUrl)
+      }
+    }
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -45,6 +77,7 @@ export default function SettingsPage() {
       />
 
       <div className="flex flex-col gap-6 lg:flex-row">
+        {/* Sidebar */}
         <motion.nav
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -68,13 +101,15 @@ export default function SettingsPage() {
           ))}
         </motion.nav>
 
+        {/* Content */}
         <motion.div
           key={activeTab}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
-          className="flex-1"
+          className="flex-1 min-w-0"
         >
+          {/* ── Profile ─────────────────────────────────── */}
           {activeTab === "profile" && (
             <div className="glass-card p-6 space-y-6">
               <div>
@@ -93,12 +128,12 @@ export default function SettingsPage() {
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {[
-                  { label: "First Name", placeholder: "James", defaultValue: "James" },
-                  { label: "Last Name", placeholder: "Donovan", defaultValue: "Donovan" },
-                  { label: "Email", placeholder: "james@luxestate.app", defaultValue: "james@luxestate.app" },
-                  { label: "Phone", placeholder: "+1 (555) 000-0000", defaultValue: "+1 (555) 123-4567" },
-                  { label: "Title", placeholder: "Senior Agent", defaultValue: "Senior Agent" },
-                  { label: "Office", placeholder: "Beverly Hills", defaultValue: "Beverly Hills" },
+                  { label: "First Name",  placeholder: "James",              defaultValue: "James" },
+                  { label: "Last Name",   placeholder: "Donovan",            defaultValue: "Donovan" },
+                  { label: "Email",       placeholder: "james@luxestate.app", defaultValue: "james@luxestate.app" },
+                  { label: "Phone",       placeholder: "+1 (555) 000-0000",  defaultValue: "+1 (555) 123-4567" },
+                  { label: "Title",       placeholder: "Senior Agent",       defaultValue: "Senior Agent" },
+                  { label: "Office",      placeholder: "Beverly Hills",      defaultValue: "Beverly Hills" },
                 ].map((field) => (
                   <div key={field.label} className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{field.label}</label>
@@ -116,6 +151,15 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ── Connected Accounts ───────────────────────── */}
+          {activeTab === "accounts" && (
+            <ConnectedAccountsTab
+              connectedProvider={connectedProvider}
+              errorMessage={oauthError}
+            />
+          )}
+
+          {/* ── Appearance ───────────────────────────────── */}
           {activeTab === "appearance" && (
             <div className="glass-card p-6 space-y-6">
               <div>
@@ -159,6 +203,7 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ── Notifications ────────────────────────────── */}
           {activeTab === "notifications" && (
             <div className="glass-card p-6 space-y-6">
               <div>
@@ -169,12 +214,12 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-4">
                 {[
-                  { label: "New lead assigned", description: "Get notified when a lead is assigned to you", enabled: true },
-                  { label: "Deal status change", description: "When a deal moves through the pipeline", enabled: true },
-                  { label: "WhatsApp messages", description: "Receive WhatsApp message notifications", enabled: true },
-                  { label: "Property views", description: "When someone views your property listing", enabled: false },
-                  { label: "Weekly report", description: "Summary of your weekly performance", enabled: true },
-                  { label: "Marketing emails", description: "LuxeState product updates and tips", enabled: false },
+                  { label: "New lead assigned",    description: "Get notified when a lead is assigned to you",     enabled: true },
+                  { label: "Deal status change",   description: "When a deal moves through the pipeline",          enabled: true },
+                  { label: "WhatsApp messages",    description: "Receive WhatsApp message notifications",          enabled: true },
+                  { label: "Property views",       description: "When someone views your property listing",        enabled: false },
+                  { label: "Weekly report",        description: "Summary of your weekly performance",              enabled: true },
+                  { label: "Marketing emails",     description: "LuxeState product updates and tips",              enabled: false },
                 ].map((notif) => (
                   <div
                     key={notif.label}
@@ -203,6 +248,7 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ── WhatsApp ─────────────────────────────────── */}
           {activeTab === "whatsapp" && (
             <div className="glass-card p-6 space-y-6">
               <div>
@@ -247,6 +293,7 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ── Security / Branding (placeholders) ──────── */}
           {(activeTab === "security" || activeTab === "branding") && (
             <div className="glass-card p-6 space-y-6">
               <div>
