@@ -21,6 +21,8 @@ import {
   ExternalLink,
   MessageSquare,
   Loader2,
+  Globe,
+  MousePointerClick,
 } from "lucide-react"
 import { Link, useLocation } from "wouter"
 import { Button } from "@/components/ui/button"
@@ -36,6 +38,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { surfaceInputClass, surfaceSelectClass } from "@/lib/ui-classes"
+import { FaFacebook, FaInstagram, FaWhatsapp } from "react-icons/fa"
+import { FaTiktok } from "react-icons/fa6"
 import {
   agents,
   pipelineOrder,
@@ -43,6 +47,7 @@ import {
   statusConfig,
   sourceConfig,
   allSources,
+  adPlatformSources,
 } from "@/components/dashboard/leads-data"
 import { Lead, LeadPriority, LeadSource, LeadStatus } from "@/components/dashboard/leads-types"
 import { LeadDetailModal } from "@/components/dashboard/lead-detail-modal"
@@ -82,15 +87,29 @@ function UrgencyRing({ score }: { score: number }) {
   )
 }
 
+const PLATFORM_ICON_MAP: Record<string, React.ElementType> = {
+  facebook:  FaFacebook,
+  instagram: FaInstagram,
+  whatsapp:  FaWhatsapp,
+  tiktok:    FaTiktok,
+  website:   Globe,
+  manual:    MousePointerClick,
+}
+
 function SourceBadge({ source }: { source: Lead["source"] }) {
   const cfg = sourceConfig[source] ?? {
     className: "bg-secondary/40 text-muted-foreground border-border/50",
     dotColor: "bg-muted-foreground",
     label: source,
   }
+  const PlatformIcon = cfg.platform ? PLATFORM_ICON_MAP[cfg.platform] : null
   return (
     <Badge variant="outline" className={cn("gap-1 text-[10px] font-medium px-1.5 py-0", cfg.className)}>
-      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cfg.dotColor)} />
+      {PlatformIcon ? (
+        <PlatformIcon className="h-2.5 w-2.5 shrink-0" />
+      ) : (
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cfg.dotColor)} />
+      )}
       {cfg.label}
     </Badge>
   )
@@ -340,7 +359,17 @@ export function LeadsTable({ leads, isLoading: externalLoading, onCreate, onUpda
                   className={cn("h-8 w-36 text-xs", surfaceSelectClass)}
                 >
                   <option value="all">All Sources</option>
-                  {allSources.map((s) => <option key={s} value={s}>{s}</option>)}
+                  <optgroup label="Platform">
+                    <option value="facebook">Facebook</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="website">Website</option>
+                    <option value="manual">Manual</option>
+                  </optgroup>
+                  <optgroup label="Legacy">
+                    {allSources.filter(s => !["manual","facebook","instagram","tiktok","whatsapp","website"].includes(s)).map((s) => <option key={s} value={s}>{s}</option>)}
+                  </optgroup>
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
               </div>

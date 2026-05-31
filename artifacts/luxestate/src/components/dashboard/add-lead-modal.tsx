@@ -5,9 +5,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { surfaceInputClass, surfaceSelectClass, surfaceSelectIconClass } from "@/lib/ui-classes"
-import { User, Mail, Phone, DollarSign, Building2, UserCheck, StickyNote, ChevronDown } from "lucide-react"
+import { User, Mail, Phone, DollarSign, Building2, UserCheck, StickyNote, ChevronDown, Megaphone, Layers } from "lucide-react"
 import { Lead, LeadPriority } from "@/components/dashboard/leads-types"
-import { agents, propertyOptions } from "@/components/dashboard/leads-data"
+import { agents, propertyOptions, adPlatformSources } from "@/components/dashboard/leads-data"
 import { CreateLeadInput } from "@/lib/leads-api"
 
 type Props = {
@@ -21,11 +21,13 @@ const emptyForm = {
   email: "",
   phone: "",
   budget: "",
-  source: "Website" as Lead["source"],
+  source: "manual" as Lead["source"],
   priority: "warm" as LeadPriority,
   assignedTo: agents[0],
   property: "",
   notes: "",
+  campaign: "",
+  adSetName: "",
 }
 
 export function AddLeadModal({ open, onClose, onAdd }: Props) {
@@ -37,6 +39,8 @@ export function AddLeadModal({ open, onClose, onAdd }: Props) {
     setForm((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }))
   }
+
+  const isAdPlatform = adPlatformSources.includes(form.source as typeof adPlatformSources[number])
 
   const validate = () => {
     const errs: Record<string, string> = {}
@@ -81,6 +85,8 @@ export function AddLeadModal({ open, onClose, onAdd }: Props) {
       ],
       attachments: [],
       suggestedActions: [],
+      campaign: form.campaign || undefined,
+      adSetName: isAdPlatform && form.adSetName ? form.adSetName : undefined,
     }
 
     try {
@@ -218,16 +224,57 @@ export function AddLeadModal({ open, onClose, onAdd }: Props) {
                   onChange={(e) => set("source", e.target.value as Lead["source"])}
                   className={surfaceSelectClass}
                 >
-                  <option value="Website">Website</option>
-                  <option value="Referral">Referral</option>
-                  <option value="Social Media">Social Media</option>
-                  <option value="Email">Email</option>
-                  <option value="Cold Call">Cold Call</option>
+                  <optgroup label="Platform">
+                    <option value="manual">Manual Entry</option>
+                    <option value="website">Website</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="facebook">Facebook</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="tiktok">TikTok</option>
+                  </optgroup>
+                  <optgroup label="Other">
+                    <option value="Referral">Referral</option>
+                    <option value="Email">Email</option>
+                    <option value="Cold Call">Cold Call</option>
+                    <option value="LinkedIn">LinkedIn</option>
+                  </optgroup>
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               </div>
             </div>
           </div>
+
+          {/* Campaign fields — shown for ad platforms */}
+          {isAdPlatform && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="lead-campaign" className="text-xs font-medium text-muted-foreground">Campaign Name</Label>
+                <div className="relative">
+                  <Megaphone className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="lead-campaign"
+                    value={form.campaign}
+                    onChange={(e) => set("campaign", e.target.value)}
+                    placeholder="e.g. Summer 2026"
+                    className={cn("pl-9", surfaceInputClass)}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="lead-adset" className="text-xs font-medium text-muted-foreground">Ad Set</Label>
+                <div className="relative">
+                  <Layers className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="lead-adset"
+                    value={form.adSetName}
+                    onChange={(e) => set("adSetName", e.target.value)}
+                    placeholder="e.g. Luxury Buyers 35–55"
+                    className={cn("pl-9", surfaceInputClass)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Priority + Assign */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

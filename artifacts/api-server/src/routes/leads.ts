@@ -24,6 +24,8 @@ function sanitize(row: typeof leadsTable.$inferSelect) {
     tags: row.tags ?? [],
     attachments: (row.attachments as Array<{ name: string; size: string; type: string }>) ?? [],
     suggestedActions: row.suggestedActions ?? [],
+    adSetName: row.adSetName ?? null,
+    adCreativeId: row.adCreativeId ?? null,
   };
 }
 

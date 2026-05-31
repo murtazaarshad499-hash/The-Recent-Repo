@@ -1,6 +1,13 @@
 export type LeadStatus = "new" | "qualified" | "proposal" | "negotiation" | "won" | "lost"
 export type LeadPriority = "hot" | "warm" | "cold"
+
 export type LeadSource =
+  | "manual"
+  | "facebook"
+  | "instagram"
+  | "whatsapp"
+  | "website"
+  | "tiktok"
   | "Website"
   | "Referral"
   | "Social Media"
@@ -36,6 +43,8 @@ export type Lead = {
   duplicateOf?: number
   campaign?: string
   adSource?: string
+  adSetName?: string
+  adCreativeId?: string
   aiSummary?: string
   suggestedActions?: string[]
 }

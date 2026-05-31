@@ -31,7 +31,12 @@ import {
   File,
   X,
   Tag,
+  MousePointerClick,
+  Hash,
+  Layers,
 } from "lucide-react"
+import { FaFacebook, FaInstagram, FaWhatsapp } from "react-icons/fa"
+import { FaTiktok } from "react-icons/fa6"
 import {
   agents,
   propertyOptions,
@@ -65,15 +70,29 @@ function getDefaultSuggestedActions(status: LeadStatus): string[] {
   return map[status] ?? []
 }
 
+const PLATFORM_ICON_MAP: Record<string, React.ElementType> = {
+  facebook:  FaFacebook,
+  instagram: FaInstagram,
+  whatsapp:  FaWhatsapp,
+  tiktok:    FaTiktok,
+  website:   Globe,
+  manual:    MousePointerClick,
+}
+
 function SourceBadge({ source }: { source: Lead["source"] }) {
   const cfg = sourceConfig[source] ?? {
     className: "bg-secondary/40 text-muted-foreground border-border/50",
     dotColor: "bg-muted-foreground",
     label: source,
   }
+  const PlatformIcon = cfg.platform ? PLATFORM_ICON_MAP[cfg.platform] : null
   return (
     <Badge variant="outline" className={cn("text-xs gap-1.5", cfg.className)}>
-      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", cfg.dotColor)} />
+      {PlatformIcon ? (
+        <PlatformIcon className="h-3 w-3 shrink-0" />
+      ) : (
+        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", cfg.dotColor)} />
+      )}
       {cfg.label}
     </Badge>
   )
@@ -451,6 +470,42 @@ export function LeadDetailModal({ lead, onClose, onUpdate, onDelete }: Props) {
                       ) : (
                         <p className="text-sm text-foreground">
                           {data.campaign ?? <span className="text-muted-foreground">—</span>}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <FieldLabel label="Ad Set" />
+                      {isEditing ? (
+                        <div className="relative">
+                          <Layers className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={editData!.adSetName ?? ""}
+                            onChange={(e) => setField("adSetName", e.target.value || undefined)}
+                            placeholder="e.g. Luxury Buyers 35-55"
+                            className={cn("h-8 pl-8 text-sm", surfaceInputClass)}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-foreground">
+                          {data.adSetName ?? <span className="text-muted-foreground">—</span>}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <FieldLabel label="Creative ID" />
+                      {isEditing ? (
+                        <div className="relative">
+                          <Hash className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={editData!.adCreativeId ?? ""}
+                            onChange={(e) => setField("adCreativeId", e.target.value || undefined)}
+                            placeholder="e.g. 23856734001"
+                            className={cn("h-8 pl-8 text-sm font-mono", surfaceInputClass)}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm font-mono text-foreground">
+                          {data.adCreativeId ?? <span className="font-sans text-muted-foreground">—</span>}
                         </p>
                       )}
                     </div>

@@ -17,7 +17,15 @@ export const priorityConfig: Record<LeadPriority, { label: string; className: st
   cold: { label: "Cold", className: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
 }
 
+export const adPlatformSources: LeadSource[] = ["facebook", "instagram", "tiktok"]
+
 export const allSources: LeadSource[] = [
+  "manual",
+  "facebook",
+  "instagram",
+  "tiktok",
+  "whatsapp",
+  "website",
   "Website",
   "Referral",
   "Social Media",
@@ -29,16 +37,24 @@ export const allSources: LeadSource[] = [
   "LinkedIn",
 ]
 
-export const sourceConfig: Record<LeadSource, { label: string; className: string; dotColor: string }> = {
-  Website: { label: "Website", className: "bg-blue-500/10 text-blue-400 border-blue-500/20", dotColor: "bg-blue-400" },
-  Referral: { label: "Referral", className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dotColor: "bg-emerald-400" },
-  "Social Media": { label: "Social", className: "bg-purple-500/10 text-purple-400 border-purple-500/20", dotColor: "bg-purple-400" },
-  Email: { label: "Email", className: "bg-amber-500/10 text-amber-400 border-amber-500/20", dotColor: "bg-amber-400" },
-  "Cold Call": { label: "Cold Call", className: "bg-orange-500/10 text-orange-400 border-orange-500/20", dotColor: "bg-orange-400" },
-  "Facebook Ad": { label: "FB Ad", className: "bg-sky-500/10 text-sky-400 border-sky-500/20", dotColor: "bg-sky-400" },
-  "Google Ad": { label: "Google Ad", className: "bg-red-500/10 text-red-400 border-red-500/20", dotColor: "bg-red-400" },
-  "Instagram Ad": { label: "IG Ad", className: "bg-pink-500/10 text-pink-400 border-pink-500/20", dotColor: "bg-pink-400" },
-  LinkedIn: { label: "LinkedIn", className: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20", dotColor: "bg-indigo-400" },
+export type SourceConfigEntry = { label: string; className: string; dotColor: string; platform?: string }
+
+export const sourceConfig: Partial<Record<LeadSource, SourceConfigEntry>> & Record<string, SourceConfigEntry> = {
+  manual:         { label: "Manual",      className: "bg-secondary/40 text-muted-foreground border-border/50",       dotColor: "bg-muted-foreground" },
+  facebook:       { label: "Facebook",    className: "bg-blue-500/10 text-blue-400 border-blue-500/20",              dotColor: "bg-blue-400",   platform: "facebook" },
+  instagram:      { label: "Instagram",   className: "bg-pink-500/10 text-pink-400 border-pink-500/20",              dotColor: "bg-pink-400",   platform: "instagram" },
+  whatsapp:       { label: "WhatsApp",    className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",     dotColor: "bg-emerald-400",platform: "whatsapp" },
+  website:        { label: "Website",     className: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",        dotColor: "bg-indigo-400", platform: "website" },
+  tiktok:         { label: "TikTok",      className: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",              dotColor: "bg-zinc-400",   platform: "tiktok" },
+  Website:        { label: "Website",     className: "bg-blue-500/10 text-blue-400 border-blue-500/20",              dotColor: "bg-blue-400" },
+  Referral:       { label: "Referral",    className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",     dotColor: "bg-emerald-400" },
+  "Social Media": { label: "Social",      className: "bg-purple-500/10 text-purple-400 border-purple-500/20",        dotColor: "bg-purple-400" },
+  Email:          { label: "Email",       className: "bg-amber-500/10 text-amber-400 border-amber-500/20",           dotColor: "bg-amber-400" },
+  "Cold Call":    { label: "Cold Call",   className: "bg-orange-500/10 text-orange-400 border-orange-500/20",        dotColor: "bg-orange-400" },
+  "Facebook Ad":  { label: "FB Ad",       className: "bg-sky-500/10 text-sky-400 border-sky-500/20",                 dotColor: "bg-sky-400",    platform: "facebook" },
+  "Google Ad":    { label: "Google Ad",   className: "bg-red-500/10 text-red-400 border-red-500/20",                 dotColor: "bg-red-400" },
+  "Instagram Ad": { label: "IG Ad",       className: "bg-pink-500/10 text-pink-400 border-pink-500/20",              dotColor: "bg-pink-400",   platform: "instagram" },
+  LinkedIn:       { label: "LinkedIn",    className: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",        dotColor: "bg-indigo-400" },
 }
 
 export const agents = ["James Donovan", "Sarah Mitchell", "Michael Chen", "Emily Rodriguez"]
